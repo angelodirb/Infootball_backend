@@ -1,5 +1,13 @@
 // backend/src/users/entities/user.entity.ts
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, ManyToMany, JoinTable } from 'typeorm';
+import { 
+  Entity, 
+  PrimaryGeneratedColumn, 
+  Column, 
+  CreateDateColumn, 
+  UpdateDateColumn, 
+  ManyToMany, 
+  JoinTable 
+} from 'typeorm';
 import { Team } from '../../teams/entities/team.entity';
 
 @Entity('users')
@@ -13,19 +21,19 @@ export class User {
   @Column()
   password: string;
 
-  // ✅ AGREGAR ESTOS CAMPOS
+  // ✅ NUEVOS CAMPOS (agregados)
   @Column()
   firstName: string;
 
   @Column()
   lastName: string;
 
-  // ✅ HACER OPCIONAL username (por compatibilidad)
+  // ✅ CAMPO OPCIONAL (para compatibilidad)
   @Column({ nullable: true })
-  username: string;
+  username?: string;
 
   @Column({ nullable: true })
-  avatar: string;
+  avatar?: string;
 
   @Column({ default: true })
   isActive: boolean;
