@@ -11,8 +11,8 @@ export class AuthController {
     @Body() registerDto: { 
       email: string; 
       password: string; 
-      firstName: string;  // ✅ CAMBIAR
-      lastName: string;   // ✅ CAMBIAR
+      firstName: string;  // ✅ CAMBIO: De username a firstName
+      lastName: string;   // ✅ CAMBIO: Agregado lastName
     },
   ) {
     return await this.authService.register(registerDto);
