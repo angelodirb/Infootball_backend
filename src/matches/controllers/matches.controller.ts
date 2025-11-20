@@ -1,7 +1,18 @@
-// backend/src/matches/controllers/matches.controller.ts - VERSION FINAL CON TEST
-import { Controller, Get, Query } from '@nestjs/common';
+// Backend - src/matches/controllers/matches.controller.ts
+
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Patch,
+  Param,
+  Delete,
+  Query,
+} from '@nestjs/common';
 import { MatchesService } from '../services/matches.service';
-import { FootballApiService } from '../services/football-api.service';
+import { FootballApiService } from '../../common/services/football-api.service';
+import { Match } from '../entities/match.entity';
 
 @Controller('matches')
 export class MatchesController {
@@ -10,183 +21,150 @@ export class MatchesController {
     private readonly footballApiService: FootballApiService,
   ) {}
 
-  // ✅ NUEVO: Endpoint para testear conexión con API Football
-  @Get('test-api')
-  async testApiConnection() {
-    try {
-      const status = await this.footballApiService.testConnection();
-      return {
-        success: true,
-        message: 'API Football connection successful',
-        data: status
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: 'API Football connection failed',
-        error: error.message
-      };
-    }
+  @Post()
+  create(@Body() createMatchDto: Partial<Match>): Promise<Match> {
+    return this.matchesService.create(createMatchDto);
   }
 
-  // Obtener todos los partidos (con datos reales de API Football)
   @Get()
-  async findAll() {
-    try {
-      const apiMatches = await this.footballApiService.getTodayMatches();
-      
-      const transformedMatches = apiMatches.map(match => 
-        this.footballApiService.transformMatch(match)
-      );
-
-      return {
-        success: true,
-        data: transformedMatches,
-        count: transformedMatches.length,
-        source: 'API-Football'
-      };
-    } catch (error) {
-      console.error('❌ Error fetching from API Football, using local data:', error);
-      
-      // Fallback a datos locales
-      const localMatches = await this.matchesService.findAll();
-      return {
-        success: true,
-        data: localMatches,
-        count: localMatches.length,
-        source: 'Local Database',
-        warning: 'API Football unavailable, using local data'
-      };
-    }
+  async findAll(): Promise<Match[]> {
+    return this.matchesService.findAll();
   }
 
-  // Obtener partidos en vivo (datos reales)
-  @Get('live')
-  async findLive() {
-    try {
-      const liveMatches = await this.footballApiService.getLiveMatches();
-      
-      const transformedMatches = liveMatches.map(match => 
-        this.footballApiService.transformMatch(match)
-      );
+@Get('live')
+async findLive(): Promise<any> {
+  const apiMatches = await this.footballApiService.getLiveMatches();
+  return this.transformApiMatches(apiMatches);
+}
 
-      return {
-        success: true,
-        data: transformedMatches,
-        count: transformedMatches.length,
-        source: 'API-Football'
-      };
-    } catch (error) {
-      console.error('❌ Error fetching live matches from API Football:', error);
-      return {
-        success: false,
-        data: [],
-        count: 0,
-        error: 'No se pudieron obtener partidos en vivo',
-        message: error.message
-      };
-    }
-  }
-
-  // Obtener partidos por fecha
-  @Get('date')
-  async findByDate(@Query('date') date: string) {
-    if (!date) {
-      date = new Date().toISOString().split('T')[0];
-    }
-
-    try {
-      const apiMatches = await this.footballApiService.getMatchesByDate(date);
-      
-      const transformedMatches = apiMatches.map(match => 
-        this.footballApiService.transformMatch(match)
-      );
-
-      return {
-        success: true,
-        data: transformedMatches,
-        count: transformedMatches.length,
-        date: date,
-        source: 'API-Football'
-      };
-    } catch (error) {
-      console.error('❌ Error fetching matches by date from API Football:', error);
-      return {
-        success: false,
-        data: [],
-        count: 0,
-        date: date,
-        error: 'No se pudieron obtener partidos para esta fecha',
-        message: error.message
-      };
-    }
-  }
-
-  // Obtener partidos destacados (las grandes ligas)
   @Get('featured')
-  async findFeatured() {
-    try {
-      const featuredMatches = await this.footballApiService.getFeaturedMatches();
-      
-      const transformedMatches = featuredMatches.map(match => 
-        this.footballApiService.transformMatch(match)
-      );
+  async getFeatured(): Promise<any> {
+    const apiMatches = await this.footballApiService.getFeaturedMatches();
+    return this.transformApiMatches(apiMatches);
+  }
 
-      return {
-        success: true,
-        data: transformedMatches,
-        count: transformedMatches.length,
-        source: 'API-Football'
-      };
-    } catch (error) {
-      console.error('❌ Error fetching featured matches from API Football:', error);
-      return {
-        success: false,
-        data: [],
-        count: 0,
-        error: 'No se pudieron obtener partidos destacados',
-        message: error.message
-      };
+  @Get('test-api')
+  async testApi(): Promise<any> {
+    return this.footballApiService.testConnection();
+  }
+
+  @Get('date')
+  async findByDate(
+    @Query('date') date?: string,
+    @Query('start') startDate?: string,
+    @Query('end') endDate?: string,
+  ): Promise<any> {
+    // Si se proporciona una fecha específica, usar API externa
+    if (date) {
+      const apiMatches = await this.footballApiService.getMatchesByDate(date);
+      return this.transformApiMatches(apiMatches);
+    }
+
+    // Si se proporcionan fechas de rango, obtener partidos de la API externa
+    if (startDate && endDate) {
+      // Obtener partidos para cada día del rango (limitado a 7 días para no exceder límites de API)
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      const allMatches = [];
+
+      // Limitar a 7 días para no hacer demasiadas peticiones
+      const maxDays = 7;
+      let currentDate = new Date(start);
+      let daysProcessed = 0;
+
+      while (currentDate <= end && daysProcessed < maxDays) {
+        const dateStr = currentDate.toISOString().split('T')[0];
+        const dayMatches = await this.footballApiService.getMatchesByDate(dateStr);
+        allMatches.push(...dayMatches);
+        currentDate.setDate(currentDate.getDate() + 1);
+        daysProcessed++;
+      }
+
+      return this.transformApiMatches(allMatches);
+    }
+
+    // Por defecto, obtener partidos de hoy de la API externa
+    const today = new Date().toISOString().split('T')[0];
+    const apiMatches = await this.footballApiService.getMatchesByDate(today);
+    return this.transformApiMatches(apiMatches);
+  }
+
+  // Transformar partidos de API externa al formato del frontend
+  private transformApiMatches(apiMatches: any[]): any[] {
+    return apiMatches.map((match: any) => ({
+      id: match.fixture.id,
+      homeTeam: {
+        id: match.teams.home.id,
+        name: match.teams.home.name,
+        logo: match.teams.home.logo,
+        country: match.league.country,
+      },
+      awayTeam: {
+        id: match.teams.away.id,
+        name: match.teams.away.name,
+        logo: match.teams.away.logo,
+        country: match.league.country,
+      },
+      date: match.fixture.date.split('T')[0],
+      time: new Date(match.fixture.date).toLocaleTimeString('es-ES', {
+        hour: '2-digit',
+        minute: '2-digit'
+      }),
+      status: this.mapStatus(match.fixture.status.short),
+      homeScore: match.goals.home,
+      awayScore: match.goals.away,
+      competition: {
+        id: match.league.id,
+        name: match.league.name,
+        logo: match.league.logo,
+        country: match.league.country,
+        season: match.league.season?.toString() || '2024',
+      },
+    }));
+  }
+
+  private mapStatus(status: string): 'scheduled' | 'live' | 'finished' {
+    switch (status) {
+      case 'NS':
+      case 'TBD':
+      case 'PST':
+        return 'scheduled';
+      case '1H':
+      case '2H':
+      case 'HT':
+      case 'ET':
+      case 'BT':
+      case 'P':
+        return 'live';
+      case 'FT':
+      case 'AET':
+      case 'PEN':
+        return 'finished';
+      default:
+        return 'scheduled';
     }
   }
 
-  // Obtener partidos por rango de fechas
-  @Get('range')
-  async findByDateRange(
-    @Query('from') from: string,
-    @Query('to') to: string,
-  ) {
-    if (!from || !to) {
-      return {
-        success: false,
-        error: 'Se requieren parámetros "from" y "to" (YYYY-MM-DD)'
-      };
-    }
+  @Get('team/:teamId')
+  findByTeam(@Param('teamId') teamId: string): Promise<Match[]> {
+    return this.matchesService.findByTeam(teamId);
+  }
 
-    try {
-      const apiMatches = await this.footballApiService.getMatchesByDateRange(from, to);
-      
-      const transformedMatches = apiMatches.map(match => 
-        this.footballApiService.transformMatch(match)
-      );
+  @Get(':id')
+  findOne(@Param('id') id: string): Promise<Match> {
+    return this.matchesService.findOne(id);
+  }
 
-      return {
-        success: true,
-        data: transformedMatches,
-        count: transformedMatches.length,
-        dateRange: { from, to },
-        source: 'API-Football'
-      };
-    } catch (error) {
-      console.error('❌ Error fetching matches by date range from API Football:', error);
-      return {
-        success: false,
-        data: [],
-        count: 0,
-        dateRange: { from, to },
-        error: 'No se pudieron obtener partidos para este rango de fechas',
-        message: error.message
-      };
-    }
+  @Patch(':id')
+  update(
+    @Param('id') id: string,
+    @Body() updateMatchDto: Partial<Match>,
+  ): Promise<Match> {
+    return this.matchesService.update(id, updateMatchDto);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string): Promise<void> {
+    return this.matchesService.remove(id);
   }
 }
