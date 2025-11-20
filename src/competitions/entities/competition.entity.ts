@@ -1,3 +1,4 @@
+//competición.entity.ts
 import {
   Entity,
   PrimaryGeneratedColumn,
